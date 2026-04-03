@@ -10,6 +10,7 @@
             <h1 class="text-2xl font-black tracking-tight text-gray-800">AI Interviewer <span class="text-blue-600">Pro</span></h1>
           </div>
           <div class="flex items-center gap-2">
+            <el-button @click="showHistory = true" :icon="History" circle />
             <el-button @click="showSettings = true" :icon="Settings" circle />
             <el-tag type="info" effect="plain" class="rounded-full">Local Only</el-tag>
           </div>
@@ -66,7 +67,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-6 rounded-2xl">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 bg-gray-50 p-6 rounded-2xl">
           <div class="space-y-2">
             <label class="text-sm font-bold text-gray-600">Interview Difficulty</label>
             <el-select v-model="config.difficulty" class="w-full">
@@ -89,6 +90,15 @@
               <el-option label="Technical Interview" value="Technical" />
               <el-option label="Behavioral Interview" value="Behavioral" />
               <el-option label="Full Round" value="Full" />
+            </el-select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-gray-600">AI Persona</label>
+            <el-select v-model="config.persona" class="w-full">
+              <el-option label="Friendly (Encouraging)" value="Friendly" />
+              <el-option label="Strict (Professional)" value="Strict" />
+              <el-option label="Technical Expert (Deep Dive)" value="Expert" />
+              <el-option label="Stress Interview (压力面)" value="Stress" />
             </el-select>
           </div>
         </div>
@@ -245,14 +255,70 @@
               </div>
             </div>
           </div>
+
+          <div class="p-8 border-t border-gray-100 bg-gray-50/50">
+            <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight mb-4">
+              <div class="w-2 h-6 bg-purple-500 rounded-full"></div> Final Evaluation Summary
+            </h4>
+            <p class="text-sm text-gray-700 leading-relaxed bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+              {{ report.final_summary }}
+            </p>
+          </div>
+
+          <!-- Transcript with Evaluation -->
+          <div class="p-8 border-t border-gray-100">
+            <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight mb-6">
+              <div class="w-2 h-6 bg-blue-500 rounded-full"></div> Detailed Q&A Evaluation
+            </h4>
+            <div class="space-y-6">
+              <div v-for="(item, idx) in report.transcript_evaluation" :key="idx" class="space-y-3">
+                <div class="flex gap-4 items-start">
+                  <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs flex-shrink-0">Q</div>
+                  <div class="text-sm font-medium text-gray-700 italic">"{{ item.question }}"</div>
+                </div>
+                <div class="flex gap-4 items-start">
+                  <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-xs flex-shrink-0">A</div>
+                  <div class="text-sm text-gray-600">"{{ item.answer }}"</div>
+                </div>
+                <div class="ml-12 p-4 bg-white border border-gray-100 rounded-xl shadow-sm">
+                  <div class="flex items-center gap-2 mb-2">
+                    <div class="text-[10px] font-bold uppercase tracking-widest text-blue-500">AI Evaluation</div>
+                    <div class="h-px flex-1 bg-gray-100"></div>
+                  </div>
+                  <p class="text-xs text-gray-500 leading-relaxed">{{ item.evaluation }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="flex justify-center gap-4">
           <el-button size="large" @click="resetSession" class="rounded-xl px-8">New Session</el-button>
-          <el-button type="primary" size="large" @click="downloadVideo" class="rounded-xl px-8">Download Recording</el-button>
+          <el-button type="primary" size="large" @click="downloadReport" class="rounded-xl px-8">Download Report (JSON)</el-button>
+          <el-button type="success" size="large" @click="downloadVideo" class="rounded-xl px-8">Download Recording</el-button>
         </div>
       </div>
     </el-card>
+
+    <!-- History Dialog -->
+    <el-dialog v-model="showHistory" title="Past Interview Records" width="800px" class="rounded-3xl overflow-hidden">
+      <div v-if="pastRecords.length === 0" class="py-12 text-center text-gray-400">
+        <History class="w-12 h-12 mx-auto mb-4 opacity-20" />
+        <p>No past records found.</p>
+      </div>
+      <div v-else class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+        <div v-for="(record, idx) in pastRecords" :key="idx" class="p-4 border border-gray-100 rounded-2xl hover:bg-gray-50 transition-colors flex justify-between items-center">
+          <div>
+            <div class="font-bold text-gray-800">{{ record.date }} - {{ record.type }}</div>
+            <div class="text-xs text-gray-500">{{ record.difficulty }} | Score: {{ record.score }}/100</div>
+          </div>
+          <div class="flex gap-2">
+            <el-button size="small" @click="viewPastReport(record)">View Report</el-button>
+            <el-button size="small" type="danger" @click="deleteRecord(idx)" plain>Delete</el-button>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
 
     <!-- Settings Dialog -->
     <el-dialog v-model="showSettings" title="API Configuration" width="450px" class="rounded-3xl overflow-hidden">
@@ -285,7 +351,7 @@ import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { 
   Mic, Settings, ShieldCheck, Briefcase, FileText, UploadCloud, 
   CheckCircle2, Loader2, Info, AlertCircle, Settings2, Download,
-  PlayCircle
+  PlayCircle, History
 } from 'lucide-vue-next';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as pdfjsLib from "pdfjs-dist";
@@ -299,6 +365,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 // --- State Management ---
 const step = ref('config');
 const showSettings = ref(false);
+const showHistory = ref(false);
 const tempKey = ref(localStorage.getItem('GEMINI_API_KEY') || '');
 const aiStatus = ref('');
 const isAiThinking = ref(false);
@@ -312,13 +379,15 @@ const config = reactive({
   resumeText: '',
   difficulty: 'Senior',
   language: 'Chinese',
-  type: 'Technical'
+  type: 'Technical',
+  persona: 'Strict'
 });
 
 const chatHistory = ref([]);
 const visibleHistory = ref([]);
 const report = ref(null);
 const chatContainer = ref(null);
+const pastRecords = ref(JSON.parse(localStorage.getItem('INTERVIEW_RECORDS') || '[]'));
 
 // --- Media Refs ---
 const videoRef = ref(null);
@@ -430,6 +499,12 @@ const runAiStep = async (userText, isInitial = false) => {
     });
 
     const systemPrompt = `You are a professional ${config.difficulty} level interviewer for a ${config.type} role.
+    Persona: ${config.persona}. 
+    - If Friendly: Be warm, encouraging, and helpful.
+    - If Strict: Be professional, critical, and focused on precision.
+    - If Expert: Deep dive into implementation details, ask "why" and "how".
+    - If Stress: Be challenging, skeptical, and push the candidate to their limits.
+    
     JD: ${config.jd}
     Resume: ${config.resumeText}
     Language: ${config.language}.
@@ -554,17 +629,41 @@ const endInterview = async () => {
       generationConfig: { responseMimeType: "application/json" }
     });
 
-    const reportPrompt = `Based on the interview history provided, generate a comprehensive evaluation report in JSON format: 
+    const reportPrompt = `Based on the interview history provided, generate a comprehensive evaluation report in JSON format. 
+    Evaluate each answer in the transcript.
+    
+    Output Format:
     { 
       "overall_score": 0-100, 
       "radar_chart": {"Technical Depth": 0, "Communication": 0, "Problem Solving": 0, "Experience": 0}, 
       "strengths": ["list of 3-5 strengths"], 
       "weaknesses": ["list of 2-3 improvements"], 
-      "final_verdict": "Strong Hire | Hire | No Hire" 
+      "final_verdict": "Strong Hire | Hire | No Hire",
+      "transcript_evaluation": [
+        {
+          "question": "The question asked",
+          "answer": "The candidate's answer",
+          "evaluation": "Your detailed evaluation of this specific answer"
+        }
+      ],
+      "final_summary": "Overall ability evaluation and suggestions"
     }`;
 
     const result = await model.generateContent([reportPrompt, ...chatHistory.value.map(h => h.parts[0].text)]);
-    report.value = JSON.parse(result.response.text());
+    const reportData = JSON.parse(result.response.text());
+    report.value = reportData;
+    
+    // Save to history
+    const newRecord = {
+      date: new Date().toLocaleString(),
+      type: config.type,
+      difficulty: config.difficulty,
+      score: reportData.overall_score,
+      report: reportData
+    };
+    pastRecords.value.unshift(newRecord);
+    localStorage.setItem('INTERVIEW_RECORDS', JSON.stringify(pastRecords.value));
+    
     step.value = 'report';
   } catch (err) {
     console.error("Report generation error:", err);
@@ -578,9 +677,33 @@ const resetSession = () => {
   visibleHistory.value = [];
   recordedChunks = [];
   showEditor.value = false;
+  report.value = null;
   if (videoRef.value && videoRef.value.srcObject) {
     videoRef.value.srcObject.getTracks().forEach(track => track.stop());
   }
+};
+
+const downloadReport = () => {
+  if (!report.value) return;
+  const dataStr = JSON.stringify(report.value, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `interview-report-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const viewPastReport = (record) => {
+  report.value = record.report;
+  step.value = 'report';
+  showHistory.value = false;
+};
+
+const deleteRecord = (index) => {
+  pastRecords.value.splice(index, 1);
+  localStorage.setItem('INTERVIEW_RECORDS', JSON.stringify(pastRecords.value));
 };
 </script>
 
