@@ -1,0 +1,5 @@
+{
+  "name": "Local AI Interviewer",
+  "description": "A pure client-side AI voice interviewer system using Gemini API, featuring local recording and code evaluation.",
+  "requestFramePermissions": ["camera", "microphone"]
+}
