@@ -127,11 +127,15 @@ const step = ref<'config' | 'interviewing' | 'report'>('config');
 const showHistory = ref(false);
 const showSettings = ref(false);
 const tempApiKey = ref('');
+const savedApiKey = ref(localStorage.getItem('USER_GEMINI_API_KEY') || '');
 const report = ref<ReportData | null>(null);
 const sessionRef = ref<any>(null);
 const isGeneratingReport = ref(false);
 
-const isApiKeyMissing = computed(() => !localStorage.getItem('USER_GEMINI_API_KEY'));
+const isApiKeyMissing = computed(() => {
+  if (process.env.GEMINI_API_KEY) return false;
+  return !savedApiKey.value;
+});
 
 const config = reactive<InterviewConfigType>({
   jd: "",
@@ -166,13 +170,15 @@ onMounted(() => {
 });
 
 const openSettings = () => {
-  tempApiKey.value = localStorage.getItem('USER_GEMINI_API_KEY') || '';
+  tempApiKey.value = savedApiKey.value;
   showSettings.value = true;
 };
 
 const saveSettings = () => {
   if (tempApiKey.value.trim()) {
-    localStorage.setItem('USER_GEMINI_API_KEY', tempApiKey.value.trim());
+    const key = tempApiKey.value.trim();
+    localStorage.setItem('USER_GEMINI_API_KEY', key);
+    savedApiKey.value = key;
     showSettings.value = false;
     ElMessage.success('设置已保存');
   }

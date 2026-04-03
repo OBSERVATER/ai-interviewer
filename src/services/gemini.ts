@@ -32,6 +32,9 @@ export const callAiWithRetry = async (fn: () => Promise<any>, maxRetries = 3): P
 };
 
 const getApiKey = () => {
+  const envKey = process.env.GEMINI_API_KEY;
+  if (envKey) return envKey;
+  
   const localKey = localStorage.getItem('USER_GEMINI_API_KEY');
   if (localKey) return localKey;
   
