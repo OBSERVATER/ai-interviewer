@@ -29,6 +29,15 @@ export const callAiWithRetry = async (fn: () => Promise<any>, maxRetries = 3): P
   throw lastError;
 };
 
+const getApiKey = () => {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || key === 'MY_GEMINI_API_KEY') {
+    console.error("Gemini API Key is missing or using placeholder value!");
+    return "";
+  }
+  return key;
+};
+
 export const getInterviewResponse = async (
   config: InterviewConfig,
   history: ChatMessage[],
@@ -36,7 +45,9 @@ export const getInterviewResponse = async (
   isInitial = false
 ): Promise<AiResponse> => {
   const executeRequest = async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const apiKey = getApiKey();
+    if (!apiKey) throw new Error("An API Key must be set when running in a browser");
+    const ai = new GoogleGenAI({ apiKey });
     
     const systemPrompt = `你是一位专业的 ${config.difficulty} 级别面试官，正在进行 ${config.type} 职位的面试。
     面试官性格: ${config.persona}。 
@@ -93,7 +104,9 @@ export const generateInterviewReport = async (
   history: ChatMessage[]
 ): Promise<ReportData> => {
   const executeReportGeneration = async () => {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const apiKey = getApiKey();
+    if (!apiKey) throw new Error("An API Key must be set when running in a browser");
+    const ai = new GoogleGenAI({ apiKey });
 
     const reportPrompt = `根据提供的面试历史记录，生成一份全面的 JSON 格式评估报告。
     

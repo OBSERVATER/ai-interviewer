@@ -7,7 +7,7 @@
           <div class="p-2 bg-blue-600 rounded-lg">
             <Mic class="text-white w-6 h-6" />
           </div>
-          <h1 class="text-2xl font-black tracking-tight text-slate-900">AI Interviewer <span class="text-blue-600 italic">Pro</span></h1>
+          <h1 class="text-2xl font-black tracking-tight text-slate-900">AI 智能面试官 <span class="text-blue-600 italic">专业版</span></h1>
         </div>
         <div class="flex items-center gap-4">
           <div v-if="step === 'interviewing'" class="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-xs font-bold text-slate-500">
@@ -30,8 +30,14 @@
         />
 
         <!-- Step 2: Interviewing -->
+        <div v-if="isGeneratingReport" class="py-20 text-center space-y-4">
+          <Loader2 class="w-12 h-12 text-blue-600 animate-spin mx-auto" />
+          <h3 class="text-xl font-bold text-gray-800">正在生成评估报告...</h3>
+          <p class="text-gray-500">AI 正在分析您的表现，请稍候。</p>
+        </div>
+
         <InterviewSession 
-          v-if="step === 'interviewing'" 
+          v-else-if="step === 'interviewing'" 
           ref="sessionRef"
           :config="config" 
           @end="handleInterviewEnd" 
@@ -56,8 +62,8 @@
       <div v-else class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
         <div v-for="(record, idx) in pastRecords" :key="idx" class="p-4 border border-gray-100 rounded-2xl hover:bg-gray-50 transition-colors flex justify-between items-center">
           <div>
-            <div class="font-bold text-gray-800">{{ record.date }} - {{ record.type }}</div>
-            <div class="text-xs text-gray-500">{{ record.difficulty }} | 评分: {{ record.score }}/100</div>
+            <div class="font-bold text-gray-800">{{ record.date }} - {{ typeMap[record.type] || record.type }}</div>
+            <div class="text-xs text-gray-500">{{ difficultyMap[record.difficulty] || record.difficulty }} | 评分: {{ record.score }}/100</div>
           </div>
           <div class="flex gap-2">
             <el-button size="small" @click="viewPastReport(record)">查看报告</el-button>
@@ -71,7 +77,8 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue';
-import { Mic, History } from 'lucide-vue-next';
+import { Mic, History, Loader2 } from 'lucide-vue-next';
+import { ElMessage } from 'element-plus';
 import './services/editor';
 import type { InterviewConfig as InterviewConfigType, ReportData, InterviewRecord } from './types';
 import { generateInterviewReport } from './services/gemini';
@@ -84,6 +91,7 @@ const step = ref<'config' | 'interviewing' | 'report'>('config');
 const showHistory = ref(false);
 const report = ref<ReportData | null>(null);
 const sessionRef = ref<any>(null);
+const isGeneratingReport = ref(false);
 
 const config = reactive<InterviewConfigType>({
   jd: "",
@@ -95,6 +103,19 @@ const config = reactive<InterviewConfigType>({
   duration: 30
 });
 
+const difficultyMap: Record<string, string> = {
+  'Junior': '初级',
+  'Middle': '中级',
+  'Senior': '高级',
+  'Expert': '专家'
+};
+
+const typeMap: Record<string, string> = {
+  'Technical': '技术面试',
+  'Behavioral': '行为面试',
+  'Full': '全流程面试'
+};
+
 const pastRecords = ref<InterviewRecord[]>(JSON.parse(localStorage.getItem('INTERVIEW_RECORDS') || '[]'));
 
 // --- Methods ---
@@ -102,6 +123,7 @@ const handleInterviewEnd = async () => {
   if (!sessionRef.value) return;
   
   const history = sessionRef.value.getHistory();
+  isGeneratingReport.value = true;
   
   try {
     const reportData = await generateInterviewReport(config, history);
@@ -121,7 +143,10 @@ const handleInterviewEnd = async () => {
     step.value = 'report';
   } catch (err) {
     console.error("Report generation error:", err);
-    step.value = 'report';
+    // Show error to user
+    ElMessage.error("评估报告生成失败，请重试。");
+  } finally {
+    isGeneratingReport.value = false;
   }
 };
 

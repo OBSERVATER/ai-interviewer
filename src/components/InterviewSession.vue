@@ -5,15 +5,17 @@
       <div class="relative bg-gray-900 rounded-2xl overflow-hidden aspect-video shadow-2xl ring-4 ring-gray-100">
         <video ref="videoRef" autoplay muted class="w-full h-full object-cover"></video>
         <div class="absolute top-4 left-4 flex gap-2">
-          <div v-if="isRecording && !isPaused" class="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold animate-pulse">
-            <div class="w-2 h-2 bg-white rounded-full"></div> REC
+          <div v-if="isRecording && !isPaused" class="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-[10px] font-bold animate-pulse">
+            <div class="w-2 h-2 bg-white rounded-full"></div> 录制中
           </div>
-          <div v-if="isPaused" class="flex items-center gap-2 bg-yellow-500 text-white px-3 py-1 rounded-full text-xs font-bold">
-            <Pause class="w-3 h-3" /> PAUSED
+          <div v-if="isPaused" class="flex items-center gap-2 bg-yellow-500 text-white px-3 py-1 rounded-full text-[10px] font-bold">
+            <Pause class="w-3 h-3" /> 已暂停
           </div>
         </div>
         <div class="absolute bottom-4 right-4">
-          <el-tag size="small" effect="dark" class="bg-black/50 border-none backdrop-blur-md">{{ config.difficulty }}</el-tag>
+          <el-tag size="small" effect="dark" class="bg-black/50 border-none backdrop-blur-md">
+            {{ difficultyMap[config.difficulty] || config.difficulty }}
+          </el-tag>
         </div>
       </div>
       
@@ -113,6 +115,14 @@ const isPaused = ref(false);
 const showEditor = ref(false);
 const currentLanguage = ref('python');
 const chatContainer = ref<HTMLElement | null>(null);
+
+const difficultyMap: Record<string, string> = {
+  'Junior': '初级',
+  'Middle': '中级',
+  'Senior': '高级',
+  'Expert': '专家'
+};
+
 const videoRef = ref<HTMLVideoElement | null>(null);
 const editorRef = ref<HTMLElement | null>(null);
 
