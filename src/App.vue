@@ -384,6 +384,30 @@ import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import mammoth from "mammoth";
 import * as monaco from 'monaco-editor';
+import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
+import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
+import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
+import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+
+// Monaco Editor Worker Configuration for Vite
+window.MonacoEnvironment = {
+  getWorker(_, label) {
+    if (label === 'json') {
+      return new jsonWorker();
+    }
+    if (label === 'css' || label === 'scss' || label === 'less') {
+      return new cssWorker();
+    }
+    if (label === 'html' || label === 'handlebars' || label === 'razor') {
+      return new htmlWorker();
+    }
+    if (label === 'typescript' || label === 'javascript') {
+      return new tsWorker();
+    }
+    return new editorWorker();
+  }
+};
 
 // PDF.js Worker Configuration
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -554,7 +578,7 @@ const runAiStep = async (userText, isInitial = false) => {
   try {
     const genAI = new GoogleGenerativeAI(tempKey.value);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       generationConfig: { responseMimeType: "application/json" }
     });
 
@@ -580,7 +604,9 @@ const runAiStep = async (userText, isInitial = false) => {
     
     Rules:
     1. Ask only ONE question at a time.
-    2. If it's a technical interview, include a coding challenge when appropriate.
+    2. If it's a technical interview, include a coding challenge when appropriate. 
+       - CODING SCOPE: Limit challenges to LeetCode Hot 100 or similar patterns.
+       - DIFFICULTY: Target problems with a difficulty score <= 2000 (Easy, Medium, and light Hard).
     3. Be conversational and professional.
     
     Output strictly in JSON format:
@@ -695,7 +721,7 @@ const endInterview = async () => {
   try {
     const genAI = new GoogleGenerativeAI(tempKey.value);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       generationConfig: { responseMimeType: "application/json" }
     });
 
