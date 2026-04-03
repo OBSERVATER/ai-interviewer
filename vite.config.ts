@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
   
   return {
-    base: '/',
+    base: './',
     plugins: [
       vue(), 
       tailwindcss(),
