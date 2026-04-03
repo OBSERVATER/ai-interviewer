@@ -101,6 +101,10 @@
               <el-option label="Stress Interview (压力面)" value="Stress" />
             </el-select>
           </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-gray-600">Duration (Minutes)</label>
+            <el-slider v-model="config.duration" :min="5" :max="60" :step="5" show-input />
+          </div>
         </div>
 
         <div class="flex justify-center pt-4">
@@ -123,8 +127,14 @@
           <div class="relative bg-gray-900 rounded-2xl overflow-hidden aspect-video shadow-2xl ring-4 ring-gray-100">
             <video ref="videoRef" autoplay muted class="w-full h-full object-cover"></video>
             <div class="absolute top-4 left-4 flex gap-2">
-              <div v-if="isRecording" class="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold animate-pulse">
+              <div v-if="isRecording && !isPaused" class="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold animate-pulse">
                 <div class="w-2 h-2 bg-white rounded-full"></div> REC
+              </div>
+              <div v-if="isPaused" class="flex items-center gap-2 bg-yellow-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                <Pause class="w-3 h-3" /> PAUSED
+              </div>
+              <div class="bg-black/50 text-white px-3 py-1 rounded-full text-xs font-mono backdrop-blur-md">
+                {{ formatTime(remainingTime) }}
               </div>
             </div>
             <div class="absolute bottom-4 right-4">
@@ -171,7 +181,12 @@
               </div>
             </div>
             <div class="flex justify-between items-center px-2">
-              <el-button size="small" @click="endInterview" link class="text-gray-400 hover:text-red-500">End Interview</el-button>
+              <div class="flex gap-2">
+                <el-button size="small" @click="togglePause" :type="isPaused ? 'success' : 'warning'" plain>
+                  {{ isPaused ? 'Resume' : 'Pause' }}
+                </el-button>
+                <el-button size="small" @click="endInterview" link class="text-gray-400 hover:text-red-500">End Interview</el-button>
+              </div>
               <span class="text-[10px] uppercase tracking-widest text-gray-300 font-bold">Encrypted via Gemini API</span>
             </div>
           </div>
@@ -265,6 +280,17 @@
             </p>
           </div>
 
+          <div v-if="report.off_topic_guidance && report.off_topic_guidance.length > 0" class="p-8 border-t border-gray-100 bg-red-50/30">
+            <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight mb-4">
+              <div class="w-2 h-6 bg-red-500 rounded-full"></div> Off-Topic Guidance Records
+            </h4>
+            <div class="space-y-3">
+              <div v-for="(g, i) in report.off_topic_guidance" :key="i" class="p-4 bg-white border border-red-100 rounded-xl text-xs text-gray-600 shadow-sm">
+                <span class="font-bold text-red-600 mr-2">Guidance:</span> {{ g }}
+              </div>
+            </div>
+          </div>
+
           <!-- Transcript with Evaluation -->
           <div class="p-8 border-t border-gray-100">
             <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight mb-6">
@@ -351,7 +377,7 @@ import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { 
   Mic, Settings, ShieldCheck, Briefcase, FileText, UploadCloud, 
   CheckCircle2, Loader2, Info, AlertCircle, Settings2, Download,
-  PlayCircle, History
+  PlayCircle, History, Pause, Play
 } from 'lucide-vue-next';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as pdfjsLib from "pdfjs-dist";
@@ -371,8 +397,11 @@ const aiStatus = ref('');
 const isAiThinking = ref(false);
 const isListening = ref(false);
 const isRecording = ref(false);
+const isPaused = ref(false);
 const showEditor = ref(false);
 const currentLanguage = ref('python');
+const remainingTime = ref(0);
+let timerInterval = null;
 
 const config = reactive({
   jd: '',
@@ -380,7 +409,8 @@ const config = reactive({
   difficulty: 'Senior',
   language: 'Chinese',
   type: 'Technical',
-  persona: 'Strict'
+  persona: 'Strict',
+  duration: 15
 });
 
 const chatHistory = ref([]);
@@ -452,6 +482,7 @@ const isConfigReady = computed(() => config.jd && config.resumeText && tempKey.v
 
 const startInterview = async () => {
   step.value = 'interviewing';
+  remainingTime.value = config.duration * 60;
   await nextTick();
   
   // Initialize Monaco
@@ -478,6 +509,7 @@ const startInterview = async () => {
     };
     mediaRecorder.start();
     isRecording.value = true;
+    startTimer();
   } catch (err) {
     console.error("Camera access error:", err);
   }
@@ -487,7 +519,35 @@ const startInterview = async () => {
   runAiStep(welcomeMsg, true);
 };
 
+const startTimer = () => {
+  timerInterval = setInterval(() => {
+    if (!isPaused.value && remainingTime.value > 0) {
+      remainingTime.value--;
+      if (remainingTime.value === 0) {
+        endInterview();
+      }
+    }
+  }, 1000);
+};
+
+const formatTime = (seconds) => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+const togglePause = () => {
+  isPaused.value = !isPaused.value;
+  if (isPaused.value) {
+    if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.pause();
+    synth.cancel();
+  } else {
+    if (mediaRecorder && mediaRecorder.state === 'paused') mediaRecorder.resume();
+  }
+};
+
 const runAiStep = async (userText, isInitial = false) => {
+  if (isPaused.value) return;
   isAiThinking.value = true;
   aiStatus.value = "AI is thinking...";
   
@@ -505,9 +565,18 @@ const runAiStep = async (userText, isInitial = false) => {
     - If Expert: Deep dive into implementation details, ask "why" and "how".
     - If Stress: Be challenging, skeptical, and push the candidate to their limits.
     
-    JD: ${config.jd}
-    Resume: ${config.resumeText}
-    Language: ${config.language}.
+    Interview Context:
+    - JD: ${config.jd}
+    - Resume: ${config.resumeText}
+    - Language: ${config.language}
+    - Total Duration: ${config.duration} minutes
+    - Remaining Time: ${formatTime(remainingTime.value)}
+    
+    Core Logic:
+    1. DYNAMIC FOLLOW-UP: Always adjust your next question based on the candidate's previous answer. If they mention a specific technology or project, deep dive into it.
+    2. DEEP DIVE: Ask follow-up questions to explore the depth of their knowledge. Don't just move to the next topic.
+    3. GUIDANCE: If the candidate goes off-topic or rambles, politely but firmly guide them back to the main subject.
+    4. TIME AWARENESS: Adjust the depth and number of questions based on the remaining time.
     
     Rules:
     1. Ask only ONE question at a time.
@@ -519,6 +588,7 @@ const runAiStep = async (userText, isInitial = false) => {
       "phase": "Opening | Behavioral | Technical | Coding | Closing | Finished",
       "action": "SPEAK | START_CODING | END_INTERVIEW",
       "speaker_text": "The text to be spoken by the interviewer",
+      "guidance_triggered": boolean, // Set to true if you had to guide the candidate back to the topic
       "code_context": {
         "language": "python | javascript | cpp",
         "initial_code": "Code template if starting a challenge"
@@ -639,6 +709,7 @@ const endInterview = async () => {
       "strengths": ["list of 3-5 strengths"], 
       "weaknesses": ["list of 2-3 improvements"], 
       "final_verdict": "Strong Hire | Hire | No Hire",
+      "off_topic_guidance": ["List specific instances where the candidate went off-topic and you had to guide them back"],
       "transcript_evaluation": [
         {
           "question": "The question asked",
@@ -667,17 +738,21 @@ const endInterview = async () => {
     step.value = 'report';
   } catch (err) {
     console.error("Report generation error:", err);
-    step.value = 'report'; // Still show report step even if empty
+    step.value = 'report';
+  } finally {
+    if (timerInterval) clearInterval(timerInterval);
   }
 };
 
 const resetSession = () => {
+  if (timerInterval) clearInterval(timerInterval);
   step.value = 'config';
   chatHistory.value = [];
   visibleHistory.value = [];
   recordedChunks = [];
   showEditor.value = false;
   report.value = null;
+  isPaused.value = false;
   if (videoRef.value && videoRef.value.srcObject) {
     videoRef.value.srcObject.getTracks().forEach(track => track.stop());
   }
