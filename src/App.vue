@@ -16,6 +16,9 @@
           <el-button @click="showHistory = true" circle class="hover:rotate-12 transition-transform">
             <History class="w-5 h-5" />
           </el-button>
+          <el-button @click="openSettings" circle class="hover:rotate-12 transition-transform">
+            <Settings class="w-5 h-5" />
+          </el-button>
         </div>
       </div>
     </header>
@@ -26,7 +29,7 @@
         <InterviewConfig 
           v-if="step === 'config'" 
           :config="config" 
-          @start="step = 'interviewing'" 
+          @start="startInterview" 
         />
 
         <!-- Step 2: Interviewing -->
@@ -53,6 +56,39 @@
       </el-card>
     </main>
 
+    <!-- Settings Dialog -->
+    <el-dialog 
+      v-model="showSettings" 
+      title="系统设置" 
+      width="500px" 
+      class="rounded-3xl overflow-hidden"
+      :close-on-click-modal="!isApiKeyMissing"
+      :close-on-press-escape="!isApiKeyMissing"
+      :show-close="!isApiKeyMissing"
+    >
+      <div class="space-y-4 py-4">
+        <div class="bg-yellow-50 border border-yellow-200 p-3 rounded-xl flex gap-3 text-yellow-800 text-sm mb-4">
+          <Info class="w-5 h-5 flex-shrink-0" />
+          <p>必须配置 Gemini API Key 才能使用本系统。您的 Key 仅保存在本地浏览器中。</p>
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm font-bold text-gray-700">Gemini API Key <span class="text-red-500">*</span></label>
+          <el-input 
+            v-model="tempApiKey" 
+            placeholder="AIzaSy..." 
+            type="password" 
+            show-password 
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <el-button v-if="!isApiKeyMissing" @click="showSettings = false">取消</el-button>
+          <el-button type="primary" @click="saveSettings" :disabled="!tempApiKey.trim()">保存设置</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- History Dialog -->
     <el-dialog v-model="showHistory" title="历史面试记录" width="800px" class="rounded-3xl overflow-hidden">
       <div v-if="pastRecords.length === 0" class="py-12 text-center text-gray-400">
@@ -76,8 +112,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
-import { Mic, History, Loader2 } from 'lucide-vue-next';
+import { ref, reactive, onMounted, computed } from 'vue';
+import { Mic, History, Loader2, Settings, Info } from 'lucide-vue-next';
 import { ElMessage } from 'element-plus';
 import './services/editor';
 import type { InterviewConfig as InterviewConfigType, ReportData, InterviewRecord } from './types';
@@ -89,9 +125,13 @@ import InterviewReport from './components/InterviewReport.vue';
 // --- State ---
 const step = ref<'config' | 'interviewing' | 'report'>('config');
 const showHistory = ref(false);
+const showSettings = ref(false);
+const tempApiKey = ref('');
 const report = ref<ReportData | null>(null);
 const sessionRef = ref<any>(null);
 const isGeneratingReport = ref(false);
+
+const isApiKeyMissing = computed(() => !localStorage.getItem('USER_GEMINI_API_KEY'));
 
 const config = reactive<InterviewConfigType>({
   jd: "",
@@ -119,6 +159,33 @@ const typeMap: Record<string, string> = {
 const pastRecords = ref<InterviewRecord[]>(JSON.parse(localStorage.getItem('INTERVIEW_RECORDS') || '[]'));
 
 // --- Methods ---
+onMounted(() => {
+  if (isApiKeyMissing.value) {
+    showSettings.value = true;
+  }
+});
+
+const openSettings = () => {
+  tempApiKey.value = localStorage.getItem('USER_GEMINI_API_KEY') || '';
+  showSettings.value = true;
+};
+
+const saveSettings = () => {
+  if (tempApiKey.value.trim()) {
+    localStorage.setItem('USER_GEMINI_API_KEY', tempApiKey.value.trim());
+    showSettings.value = false;
+    ElMessage.success('设置已保存');
+  }
+};
+
+const startInterview = () => {
+  if (isApiKeyMissing.value) {
+    openSettings();
+    return;
+  }
+  step.value = 'interviewing';
+};
+
 const handleInterviewEnd = async () => {
   if (!sessionRef.value) return;
   

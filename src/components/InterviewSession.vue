@@ -48,7 +48,7 @@
                 <div class="w-1 h-6 bg-white animate-bounce [animation-delay:0.2s]"></div>
                 <div class="w-1 h-4 bg-white animate-bounce [animation-delay:0.4s]"></div>
               </div>
-              {{ isListening ? '正在聆听...' : '按住说话 (或长按空格)' }}
+              {{ isAiThinking ? 'AI 正在思考...' : (isListening ? '正在聆听...' : (isAiSpeaking ? '点击打断并说话 (或长按空格)' : '按住说话 (或长按空格)')) }}
             </div>
           </el-button>
           <div class="absolute -top-2 -right-2">
@@ -93,10 +93,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { Mic, Pause, Loader2, Info } from 'lucide-vue-next';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import * as monaco from 'monaco-editor';
 import type { InterviewConfig, ChatMessage, AiResponse } from '../types';
-import { getInterviewResponse } from '../services/gemini';
-import { getSpeechRecognition, speakText } from '../services/speech';
+import { getInterviewResponseStream, transcribeAudio } from '../services/gemini';
+import { getSpeechRecognition, stopAudio } from '../services/speech';
+import { TTSQueue, PartialJsonExtractor } from '../services/ttsStream';
 
 const props = defineProps<{
   config: InterviewConfig;
@@ -109,6 +111,7 @@ const visibleHistory = ref<{ role: string; text: string }[]>([]);
 const chatHistory = ref<ChatMessage[]>([]);
 const aiStatus = ref('');
 const isAiThinking = ref(false);
+const isAiSpeaking = ref(false);
 const isListening = ref(false);
 const isRecording = ref(false);
 const isPaused = ref(false);
@@ -132,6 +135,14 @@ let recordedChunks: Blob[] = [];
 let recognition: any = null;
 let accumulatedTranscript = "";
 
+// STT Fallback State
+let sttRecorder: MediaRecorder | null = null;
+let sttChunks: Blob[] = [];
+let usingFallbackSTT = false;
+
+// TTS Streaming State
+let ttsQueue: TTSQueue | null = null;
+
 // --- Methods ---
 const startInterview = async () => {
   await nextTick();
@@ -148,21 +159,79 @@ const startInterview = async () => {
   });
 
   // Start Camera & Recording
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    if (videoRef.value) videoRef.value.srcObject = stream;
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-    mediaRecorder.start();
-    isRecording.value = true;
-  } catch (err) {
-    console.error("Camera access error:", err);
-  }
+  const requestMedia = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (videoRef.value) videoRef.value.srcObject = stream;
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+      mediaRecorder.start();
+      isRecording.value = true;
+      
+      // Setup STT Recorder
+      sttRecorder = new MediaRecorder(stream);
+      sttRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) sttChunks.push(e.data);
+      };
+      sttRecorder.onstop = async () => {
+        if (sttChunks.length === 0) return;
+        const audioBlob = new Blob(sttChunks, { type: sttRecorder?.mimeType || 'audio/webm' });
+        sttChunks = [];
+        
+        // Wait a bit to see if Web Speech API got anything
+        setTimeout(async () => {
+          if (!accumulatedTranscript.trim() && usingFallbackSTT) {
+            aiStatus.value = "正在识别语音...";
+            isAiThinking.value = true;
+            try {
+              const reader = new FileReader();
+              reader.readAsDataURL(audioBlob);
+              reader.onloadend = async () => {
+                const base64data = (reader.result as string).split(',')[1];
+                const text = await transcribeAudio(base64data, audioBlob.type);
+                if (text && text.trim()) {
+                  runAiStep(text);
+                } else {
+                  ElMessage.warning("未能识别到语音，请再说一次。");
+                  isAiThinking.value = false;
+                  aiStatus.value = "";
+                }
+              };
+            } catch (err) {
+              console.error("Fallback STT Error:", err);
+              isAiThinking.value = false;
+              aiStatus.value = "";
+            }
+          }
+        }, 600); // Wait longer than the Web Speech API timeout
+      };
 
-  // Initial AI Prompt
-  runAiStep("", true);
+      // Initial AI Prompt
+      runAiStep("", true);
+    } catch (err) {
+      console.error("Camera access error:", err);
+      ElMessageBox.confirm(
+        '系统需要相机和麦克风权限才能进行面试。请在浏览器地址栏左侧允许权限，然后点击重试。',
+        '权限被拒绝',
+        {
+          confirmButtonText: '重试',
+          cancelButtonText: '退出',
+          type: 'warning',
+          closeOnClickModal: false,
+          closeOnPressEscape: false,
+          showClose: false
+        }
+      ).then(() => {
+        requestMedia();
+      }).catch(() => {
+        emit('end');
+      });
+    }
+  };
+
+  requestMedia();
 };
 
 const runAiStep = async (userText: string, isInitial = false) => {
@@ -177,10 +246,51 @@ const runAiStep = async (userText: string, isInitial = false) => {
 
   try {
     const currentCode = editorInstance?.getValue() || "";
-    const data: AiResponse = await getInterviewResponse(props.config, chatHistory.value, currentCode, isInitial);
+    const stream = await getInterviewResponseStream(props.config, chatHistory.value, currentCode, isInitial);
+
+    if (ttsQueue) {
+      ttsQueue.stop();
+    }
+    ttsQueue = new TTSQueue(props.config.language, (playing) => {
+      isAiSpeaking.value = playing;
+    });
+
+    const extractor = new PartialJsonExtractor();
+    let fullJsonStr = "";
+    
+    // Add a placeholder message for AI
+    visibleHistory.value.push({ role: 'ai', text: "" });
+    const currentMsgIndex = visibleHistory.value.length - 1;
+
+    for await (const chunk of stream) {
+      fullJsonStr += chunk;
+      
+      // Extract new speaker text
+      const newText = extractor.extractNewText(fullJsonStr);
+      if (newText) {
+        visibleHistory.value[currentMsgIndex].text += newText;
+        ttsQueue.pushTextStream(newText);
+        
+        await nextTick();
+        if (chatContainer.value) {
+          chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+        }
+      }
+    }
+
+    ttsQueue.finishStream();
+
+    // Parse the final JSON to handle actions
+    let data: AiResponse;
+    try {
+      data = JSON.parse(fullJsonStr);
+    } catch (e) {
+      console.error("Failed to parse final JSON:", e);
+      // Fallback if JSON is malformed
+      data = { phase: 'Technical', action: 'SPEAK', speaker_text: visibleHistory.value[currentMsgIndex].text, guidance_triggered: false };
+    }
 
     chatHistory.value.push({ role: 'ai', text: data.speaker_text });
-    visibleHistory.value.push({ role: 'ai', text: data.speaker_text });
 
     if (data.action === 'START_CODING') {
       showEditor.value = true;
@@ -198,15 +308,9 @@ const runAiStep = async (userText: string, isInitial = false) => {
       setTimeout(() => emit('end'), 3000);
     }
 
-    speakText(data.speaker_text, props.config.language);
-
-    await nextTick();
-    if (chatContainer.value) {
-      chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
-    }
   } catch (error) {
     console.error("AI Error:", error);
-    visibleHistory.value.push({ role: 'ai', text: "抱歉，我遇到了点问题。请重试或检查网络。" });
+    visibleHistory.value.push({ role: 'ai', text: "抱歉，系统遇到了一些问题，请重试。" });
   } finally {
     isAiThinking.value = false;
     aiStatus.value = "";
@@ -217,7 +321,8 @@ const togglePause = () => {
   isPaused.value = !isPaused.value;
   if (isPaused.value) {
     if (mediaRecorder?.state === 'recording') mediaRecorder.pause();
-    window.speechSynthesis.cancel();
+    if (ttsQueue) ttsQueue.stop();
+    stopAudio();
   } else {
     if (mediaRecorder?.state === 'paused') mediaRecorder.resume();
   }
@@ -225,18 +330,67 @@ const togglePause = () => {
 
 // --- STT ---
 const startSTT = () => {
-  if (!recognition) return;
+  if (isAiSpeaking.value) {
+    if (ttsQueue) ttsQueue.stop();
+    stopAudio();
+    isAiSpeaking.value = false;
+  }
+  if (isAiThinking.value) {
+    ElMessage.warning("请等待 AI 思考完毕。");
+    return;
+  }
+  if (isListening.value) return;
   isListening.value = true;
   accumulatedTranscript = "";
-  recognition.start();
+  sttChunks = [];
+  
+  // Always start the audio recorder as a backup/primary
+  if (sttRecorder && sttRecorder.state === 'inactive') {
+    sttRecorder.start();
+  }
+
+  if (recognition && !usingFallbackSTT) {
+    try {
+      recognition.start();
+    } catch (err: any) {
+      if (err.name === 'InvalidStateError') {
+        console.warn('Speech recognition already started');
+      } else {
+        console.error("STT Start Error:", err);
+        usingFallbackSTT = true; // Switch to fallback on error
+      }
+    }
+  } else {
+    usingFallbackSTT = true;
+  }
 };
 
 const stopSTT = () => {
-  if (!recognition) return;
+  if (!isListening.value) return;
   isListening.value = false;
-  recognition.stop();
-  if (accumulatedTranscript.trim()) {
-    runAiStep(accumulatedTranscript);
+  
+  if (sttRecorder && sttRecorder.state === 'recording') {
+    sttRecorder.stop();
+  }
+
+  if (recognition && !usingFallbackSTT) {
+    try {
+      recognition.stop();
+    } catch (err) {
+      console.error("STT Stop Error:", err);
+    }
+    
+    setTimeout(() => {
+      if (accumulatedTranscript.trim()) {
+        runAiStep(accumulatedTranscript);
+        accumulatedTranscript = "";
+      } else {
+        // If Web Speech API returned nothing, fallback to Gemini STT
+        usingFallbackSTT = true;
+      }
+    }, 500);
+  } else {
+    usingFallbackSTT = true;
   }
 };
 
@@ -267,6 +421,7 @@ onUnmounted(() => {
     (videoRef.value.srcObject as MediaStream).getTracks().forEach(track => track.stop());
   }
   if (mediaRecorder?.state !== 'inactive') mediaRecorder?.stop();
+  stopAudio();
   window.removeEventListener('keydown', handleKeyDown);
   window.removeEventListener('keyup', handleKeyUp);
 });

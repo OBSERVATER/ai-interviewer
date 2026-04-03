@@ -1,7 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import type { InterviewConfig, ChatMessage, AiResponse, ReportData } from "../types";
 
-const GEMINI_MODEL = "gemini-3-flash-preview";
+const GEMINI_MODEL = "gemini-3.1-pro-preview"; // Use pro for better reasoning
+const GEMINI_FLASH_MODEL = "gemini-3.1-flash-preview"; // Use flash for fast tasks like STT
 
 export const callAiWithRetry = async (fn: () => Promise<any>, maxRetries = 3): Promise<any> => {
   let lastError: any = null;
@@ -15,7 +16,8 @@ export const callAiWithRetry = async (fn: () => Promise<any>, maxRetries = 3): P
                           errorMsg.includes("404") || 
                           errorMsg.includes("high demand") || 
                           errorMsg.includes("temporary") ||
-                          errorMsg.includes("quota");
+                          errorMsg.includes("quota") ||
+                          errorMsg.includes("fetch failed");
       
       if (i < maxRetries && isRetryable) {
         const delay = Math.pow(2, i) * 1000;
@@ -30,12 +32,78 @@ export const callAiWithRetry = async (fn: () => Promise<any>, maxRetries = 3): P
 };
 
 const getApiKey = () => {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key || key === 'MY_GEMINI_API_KEY') {
-    console.error("Gemini API Key is missing or using placeholder value!");
-    return "";
+  const localKey = localStorage.getItem('USER_GEMINI_API_KEY');
+  if (localKey) return localKey;
+  
+  throw new Error("Gemini API Key is missing! Please configure it in settings.");
+};
+
+export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<string | null> => {
+  if (!base64Audio || base64Audio.length < 50) return null;
+
+  const executeSTT = async () => {
+    const apiKey = getApiKey();
+    if (!apiKey) return null;
+    
+    // Gemini API strict mime type check workaround.
+    // MediaRecorder produces audio/webm, but Gemini sometimes rejects it with INVALID_ARGUMENT.
+    // Forcing it to audio/mp3 often bypasses the strict check while the underlying decoder still works.
+    const cleanMimeType = 'audio/mp3';
+
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: GEMINI_FLASH_MODEL,
+      contents: [
+        {
+          parts: [
+            { inlineData: { data: base64Audio, mimeType: cleanMimeType } },
+            { text: "Please transcribe this audio accurately into text. Only output the transcription, nothing else." }
+          ]
+        }
+      ]
+    });
+    
+    return response.text?.trim() || null;
+  };
+
+  try {
+    return await callAiWithRetry(executeSTT, 1);
+  } catch (err) {
+    console.error("Gemini STT failed:", err);
+    return null;
   }
-  return key;
+};
+
+export const generateSpeech = async (text: string): Promise<string | null> => {
+  if (!text || !text.trim()) return null;
+
+  const executeTTS = async () => {
+    const apiKey = getApiKey();
+    if (!apiKey) return null;
+    
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: text.trim() }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' }, // 'Kore' is a good default voice
+          },
+        },
+      },
+    });
+    
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+  };
+
+  try {
+    return await callAiWithRetry(executeTTS, 2); // Retry up to 2 times
+  } catch (err) {
+    console.error("Gemini TTS failed:", err);
+    return null;
+  }
 };
 
 export const getInterviewResponse = async (
@@ -67,7 +135,9 @@ export const getInterviewResponse = async (
     注: 后三个阶段 (八股、代码、反问) 的顺序可以根据面试节奏灵活调整，但必须先完成自我介绍和项目面。
     
     核心逻辑:
-    - 动态追问: 根据候选人的回答调整下一个问题。
+    - 动态追问: 仔细倾听候选人的回答，根据其回答中的细节进行深入追问，不要像机器一样生硬地切换话题。
+    - 避免重复: 绝对不要重复之前问过的问题。如果候选人已经回答过，请继续深入或进入下一个话题。
+    - 自然对话: 说话要像真人一样自然，带有适当的语气词和反馈（如“好的”、“我明白了”、“这个思路不错”），不要每次都长篇大论。
     - 深度挖掘: 探索知识深度，不要轻易跳过。
     - 时间规划: 根据预估时长 ${config.duration} 分钟来规划内容的广度和深度。
     
@@ -85,18 +155,115 @@ export const getInterviewResponse = async (
 
     const chat = ai.chats.create({
       model: GEMINI_MODEL,
-      config: { systemInstruction: systemPrompt }
+      config: { 
+        systemInstruction: systemPrompt,
+        responseMimeType: "application/json"
+      }
     });
+
+    // Reconstruct chat history for Gemini
+    if (history.length > 0 && !isInitial) {
+      for (let i = 0; i < history.length - 1; i++) {
+        const msg = history[i];
+        if (msg.role === 'user') {
+          await chat.sendMessage({ message: msg.text });
+        } else {
+          // We can't directly inject AI messages easily without full history object, 
+          // but we can pass the whole context in the prompt if needed.
+          // For simplicity and robustness, we will just send the whole history as context in the final message.
+        }
+      }
+    }
+
+    const historyContext = history.map(h => `${h.role === 'ai' ? '面试官' : '候选人'}: ${h.text}`).join('\n');
 
     const fullInput = isInitial 
       ? `开始面试。预估总时长 ${config.duration} 分钟。请根据此时间规划面试内容的深度。` 
-      : `候选人回答: ${history[history.length - 1].text}\n[当前代码]: ${currentCode}`;
+      : `以下是之前的对话记录：\n${historyContext}\n\n[当前代码]: ${currentCode}\n\n请根据候选人的最新回答给出你的回应。`;
     
     const result = await chat.sendMessage({ message: fullInput });
     return JSON.parse(result.text);
   };
 
   return callAiWithRetry(executeRequest);
+};
+
+export const getInterviewResponseStream = async function* (
+  config: InterviewConfig,
+  history: ChatMessage[],
+  currentCode: string,
+  isInitial = false
+) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("An API Key must be set when running in a browser");
+  const ai = new GoogleGenAI({ apiKey });
+  
+  const systemPrompt = `你是一位专业的 ${config.difficulty} 级别面试官，正在进行 ${config.type} 职位的面试。
+    面试官性格: ${config.persona}。 
+    
+    面试背景:
+    - 职位描述 (JD): ${config.jd}
+    - 简历内容: ${config.resumeText}
+    - 面试语言: ${config.language}
+    - 预估总时长: ${config.duration} 分钟
+    
+    面试流程 (必须严格遵守以下顺序):
+    1. 自我介绍 (Opening): 引导候选人进行自我介绍。
+    2. 项目面 (Project): 针对简历中的项目进行深入提问。
+    3. 八股面 (Technical): 考察基础知识和技术深度。
+    4. 代码面 (Coding): 提出编程挑战 (通常在面试中后期，持续 15-30 分钟)。
+    5. 反问与结语 (Closing): 允许候选人提问并结束面试。
+    注: 后三个阶段 (八股、代码、反问) 的顺序可以根据面试节奏灵活调整，但必须先完成自我介绍和项目面。
+    
+    核心逻辑:
+    - 动态追问: 仔细倾听候选人的回答，根据其回答中的细节进行深入追问，不要像机器一样生硬地切换话题。
+    - 避免重复: 绝对不要重复之前问过的问题。如果候选人已经回答过，请继续深入或进入下一个话题。
+    - 自然对话: 说话要像真人一样自然，带有适当的语气词和反馈（如“好的”、“我明白了”、“这个思路不错”），不要每次都长篇大论。
+    - 深度挖掘: 探索知识深度，不要轻易跳过。
+    - 时间规划: 根据预估时长 ${config.duration} 分钟来规划内容的广度和深度。
+    
+    严格以 JSON 格式输出:
+    {
+      "phase": "Opening | Project | Technical | Coding | Closing | Finished",
+      "action": "SPEAK | START_CODING | END_INTERVIEW",
+      "speaker_text": "面试官要说的话",
+      "guidance_triggered": boolean,
+      "code_context": {
+        "language": "python | javascript | cpp",
+        "initial_code": "代码模板"
+      }
+    }`;
+
+  const chat = ai.chats.create({
+    model: GEMINI_MODEL,
+    config: { 
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json"
+    }
+  });
+
+  if (history.length > 0 && !isInitial) {
+    for (let i = 0; i < history.length - 1; i++) {
+      const msg = history[i];
+      if (msg.role === 'user') {
+        await chat.sendMessage({ message: msg.text });
+      }
+    }
+  }
+
+  const historyContext = history.map(h => `${h.role === 'ai' ? '面试官' : '候选人'}: ${h.text}`).join('\n');
+
+  const fullInput = isInitial 
+    ? `开始面试。预估总时长 ${config.duration} 分钟。请根据此时间规划面试内容的深度。` 
+    : `以下是之前的对话记录：\n${historyContext}\n\n[当前代码]: ${currentCode}\n\n请根据候选人的最新回答给出你的回应。`;
+  
+  const resultStream = await chat.sendMessageStream({ message: fullInput });
+  
+  for await (const chunk of resultStream) {
+    if (chunk.text) {
+      yield chunk.text;
+    }
+  }
 };
 
 export const generateInterviewReport = async (

@@ -35,7 +35,7 @@
               <span class="text-sm font-bold text-gray-600">{{ key }}</span>
               <span class="text-lg font-black text-blue-600">{{ val }}</span>
             </div>
-            <el-progress :percentage="val" :show-text="false" stroke-width="8" color="#2563eb" />
+            <el-progress :percentage="val" :show-text="false" :stroke-width="8" color="#2563eb" />
           </div>
         </div>
       </div>
