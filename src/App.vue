@@ -372,7 +372,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { 
   Mic, Settings, ShieldCheck, Briefcase, FileText, UploadCloud, 
@@ -437,9 +437,29 @@ const config = reactive({
   duration: 15
 });
 
-const chatHistory = ref([]);
-const visibleHistory = ref([]);
-const report = ref(null);
+interface ChatMessage {
+  role: 'user' | 'model';
+  parts: { text: string }[];
+}
+
+interface ReportData {
+  overall_score: number;
+  radar_chart: Record<string, number>;
+  strengths: string[];
+  weaknesses: string[];
+  final_verdict: string;
+  off_topic_guidance: string[];
+  transcript_evaluation: {
+    question: string;
+    answer: string;
+    evaluation: string;
+  }[];
+  final_summary: string;
+}
+
+const chatHistory = ref<ChatMessage[]>([]);
+const visibleHistory = ref<{ role: string; text: string }[]>([]);
+const report = ref<ReportData | null>(null);
 const chatContainer = ref(null);
 const pastRecords = ref(JSON.parse(localStorage.getItem('INTERVIEW_RECORDS') || '[]'));
 
