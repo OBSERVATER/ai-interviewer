@@ -11,7 +11,6 @@
           </div>
           <div class="flex items-center gap-2">
             <el-button @click="showHistory = true" :icon="History" circle />
-            <el-button @click="showSettings = true" :icon="Settings" circle />
             <el-tag type="info" effect="plain" class="rounded-full">Local Only</el-tag>
           </div>
         </div>
@@ -171,11 +170,11 @@
                     <div class="w-1 h-6 bg-white animate-bounce [animation-delay:0.2s]"></div>
                     <div class="w-1 h-4 bg-white animate-bounce [animation-delay:0.4s]"></div>
                   </div>
-                  {{ isListening ? 'Listening...' : 'Hold to Speak' }}
+                  {{ isListening ? '正在聆听...' : '按住说话 (或长按空格)' }}
                 </div>
               </el-button>
               <div class="absolute -top-2 -right-2">
-                <el-tooltip content="Uses Web Speech API for local STT">
+                <el-tooltip content="使用 Web Speech API 进行本地语音转文字">
                   <Info class="w-5 h-5 text-gray-400 bg-white rounded-full" />
                 </el-tooltip>
               </div>
@@ -183,11 +182,11 @@
             <div class="flex justify-between items-center px-2">
               <div class="flex gap-2">
                 <el-button size="small" @click="togglePause" :type="isPaused ? 'success' : 'warning'" plain>
-                  {{ isPaused ? 'Resume' : 'Pause' }}
+                  {{ isPaused ? '继续' : '暂停' }}
                 </el-button>
-                <el-button size="small" @click="endInterview" link class="text-gray-400 hover:text-red-500">End Interview</el-button>
+                <el-button size="small" @click="endInterview" link class="text-gray-400 hover:text-red-500">结束面试</el-button>
               </div>
-              <span class="text-[10px] uppercase tracking-widest text-gray-300 font-bold">Encrypted via Gemini API</span>
+              <span class="text-[10px] uppercase tracking-widest text-gray-300 font-bold">通过 Gemini API 加密传输</span>
             </div>
           </div>
         </div>
@@ -218,30 +217,22 @@
           <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 class="w-10 h-10" />
           </div>
-          <h2 class="text-3xl font-black text-gray-800">Interview Complete</h2>
-          <p class="text-gray-500">Your recording has been saved locally. Here is your AI evaluation.</p>
+          <h2 class="text-3xl font-black text-gray-800">面试已结束</h2>
+          <p class="text-gray-500">您的录音已保存在本地。这是您的 AI 评估报告。</p>
         </div>
 
         <div v-if="report" class="bg-white rounded-3xl border border-gray-100 shadow-2xl overflow-hidden">
           <div class="bg-blue-600 p-8 text-white">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
               <div>
-                <div class="text-sm font-bold uppercase tracking-widest opacity-70 mb-2">Overall Performance</div>
+                <div class="text-sm font-bold uppercase tracking-widest opacity-70 mb-2">综合评分</div>
                 <div class="text-7xl font-black mb-2">{{ report.overall_score }}<span class="text-2xl opacity-50">/100</span></div>
                 <div class="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full text-sm font-bold">
-                  Verdict: {{ report.final_verdict }}
+                  最终结论: {{ report.final_verdict }}
                 </div>
               </div>
-              <div class="space-y-4">
-                <div v-for="(val, key) in report.radar_chart" :key="key" class="space-y-1">
-                  <div class="flex justify-between text-xs font-bold uppercase tracking-tighter">
-                    <span>{{ key }}</span>
-                    <span>{{ val }}%</span>
-                  </div>
-                  <div class="h-2 bg-white/20 rounded-full overflow-hidden">
-                    <div class="h-full bg-white transition-all duration-1000" :style="{width: val + '%'}"></div>
-                  </div>
-                </div>
+              <div class="flex justify-center">
+                <div ref="radarChartRef" class="w-full max-w-[300px] aspect-square"></div>
               </div>
             </div>
           </div>
@@ -249,7 +240,7 @@
           <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-4">
               <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight">
-                <div class="w-2 h-6 bg-green-500 rounded-full"></div> Key Strengths
+                <div class="w-2 h-6 bg-green-500 rounded-full"></div> 核心优势
               </h4>
               <div class="space-y-3">
                 <div v-for="s in report.strengths" :key="s" class="p-4 bg-green-50 border border-green-100 rounded-2xl text-sm text-green-800 flex gap-3">
@@ -260,7 +251,7 @@
             </div>
             <div class="space-y-4">
               <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight">
-                <div class="w-2 h-6 bg-orange-500 rounded-full"></div> Areas for Improvement
+                <div class="w-2 h-6 bg-orange-500 rounded-full"></div> 待改进点
               </h4>
               <div class="space-y-3">
                 <div v-for="w in report.weaknesses" :key="w" class="p-4 bg-orange-50 border border-orange-100 rounded-2xl text-sm text-orange-800 flex gap-3">
@@ -273,7 +264,7 @@
 
           <div class="p-8 border-t border-gray-100 bg-gray-50/50">
             <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight mb-4">
-              <div class="w-2 h-6 bg-purple-500 rounded-full"></div> Final Evaluation Summary
+              <div class="w-2 h-6 bg-purple-500 rounded-full"></div> 最终评估总结
             </h4>
             <p class="text-sm text-gray-700 leading-relaxed bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
               {{ report.final_summary }}
@@ -282,11 +273,11 @@
 
           <div v-if="report.off_topic_guidance && report.off_topic_guidance.length > 0" class="p-8 border-t border-gray-100 bg-red-50/30">
             <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight mb-4">
-              <div class="w-2 h-6 bg-red-500 rounded-full"></div> Off-Topic Guidance Records
+              <div class="w-2 h-6 bg-red-500 rounded-full"></div> 离题引导记录
             </h4>
             <div class="space-y-3">
               <div v-for="(g, i) in report.off_topic_guidance" :key="i" class="p-4 bg-white border border-red-100 rounded-xl text-xs text-gray-600 shadow-sm">
-                <span class="font-bold text-red-600 mr-2">Guidance:</span> {{ g }}
+                <span class="font-bold text-red-600 mr-2">引导:</span> {{ g }}
               </div>
             </div>
           </div>
@@ -294,7 +285,7 @@
           <!-- Transcript with Evaluation -->
           <div class="p-8 border-t border-gray-100">
             <h4 class="flex items-center gap-2 font-black text-gray-800 uppercase tracking-tight mb-6">
-              <div class="w-2 h-6 bg-blue-500 rounded-full"></div> Detailed Q&A Evaluation
+              <div class="w-2 h-6 bg-blue-500 rounded-full"></div> 详细问答评估
             </h4>
             <div class="space-y-6">
               <div v-for="(item, idx) in report.transcript_evaluation" :key="idx" class="space-y-3">
@@ -308,7 +299,7 @@
                 </div>
                 <div class="ml-12 p-4 bg-white border border-gray-100 rounded-xl shadow-sm">
                   <div class="flex items-center gap-2 mb-2">
-                    <div class="text-[10px] font-bold uppercase tracking-widest text-blue-500">AI Evaluation</div>
+                    <div class="text-[10px] font-bold uppercase tracking-widest text-blue-500">AI 评估</div>
                     <div class="h-px flex-1 bg-gray-100"></div>
                   </div>
                   <p class="text-xs text-gray-500 leading-relaxed">{{ item.evaluation }}</p>
@@ -319,9 +310,9 @@
         </div>
 
         <div class="flex justify-center gap-4">
-          <el-button size="large" @click="resetSession" class="rounded-xl px-8">New Session</el-button>
-          <el-button type="primary" size="large" @click="downloadReport" class="rounded-xl px-8">Download Report (JSON)</el-button>
-          <el-button type="success" size="large" @click="downloadVideo" class="rounded-xl px-8">Download Recording</el-button>
+          <el-button size="large" @click="resetSession" class="rounded-xl px-8">新面试</el-button>
+          <el-button type="primary" size="large" @click="downloadReport" class="rounded-xl px-8">下载报告 (JSON)</el-button>
+          <el-button type="success" size="large" @click="downloadVideo" class="rounded-xl px-8">下载录音</el-button>
         </div>
       </div>
     </el-card>
@@ -345,41 +336,18 @@
         </div>
       </div>
     </el-dialog>
-
-    <!-- Settings Dialog -->
-    <el-dialog v-model="showSettings" title="API Configuration" width="450px" class="rounded-3xl overflow-hidden">
-      <div class="space-y-4">
-        <div class="p-4 bg-yellow-50 border border-yellow-100 rounded-xl flex gap-3">
-          <AlertCircle class="text-yellow-600 w-5 h-5 flex-shrink-0" />
-          <p class="text-xs text-yellow-700">Your API key is stored locally in your browser's <code>localStorage</code>. It is never sent to our servers.</p>
-        </div>
-        <el-form label-position="top">
-          <el-form-item label="Gemini API Key">
-            <el-input v-model="tempKey" placeholder="AIza..." type="password" show-password class="custom-input" />
-          </el-form-item>
-        </el-form>
-        <div class="text-center">
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-xs text-blue-600 hover:underline">Get a free API key from Google AI Studio</a>
-        </div>
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <el-button @click="showSettings = false">Cancel</el-button>
-          <el-button @click="saveSettings" type="primary" class="rounded-lg px-6">Save Key</el-button>
-        </div>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
+import { ref, reactive, computed, onMounted, nextTick, watch, onUnmounted } from 'vue';
+import * as d3 from 'd3';
 import { 
   Mic, Settings, ShieldCheck, Briefcase, FileText, UploadCloud, 
   CheckCircle2, Loader2, Info, AlertCircle, Settings2, Download,
-  PlayCircle, History, Pause, Play
+  PlayCircle, History, Pause, Play, RefreshCw
 } from 'lucide-vue-next';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import mammoth from "mammoth";
@@ -414,9 +382,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 // --- State Management ---
 const step = ref('config');
-const showSettings = ref(false);
 const showHistory = ref(false);
-const tempKey = ref(localStorage.getItem('GEMINI_API_KEY') || '');
 const aiStatus = ref('');
 const isAiThinking = ref(false);
 const isListening = ref(false);
@@ -444,7 +410,13 @@ interface ChatMessage {
 
 interface ReportData {
   overall_score: number;
-  radar_chart: Record<string, number>;
+  radar_chart: {
+    "技术深度": number;
+    "问题解决": number;
+    "沟通表达": number;
+    "岗位匹配": number;
+    "潜力与学习": number;
+  };
   strengths: string[];
   weaknesses: string[];
   final_verdict: string;
@@ -460,8 +432,36 @@ interface ReportData {
 const chatHistory = ref<ChatMessage[]>([]);
 const visibleHistory = ref<{ role: string; text: string }[]>([]);
 const report = ref<ReportData | null>(null);
-const chatContainer = ref(null);
+const chatContainer = ref<HTMLElement | null>(null);
+const radarChartRef = ref<HTMLElement | null>(null);
 const pastRecords = ref(JSON.parse(localStorage.getItem('INTERVIEW_RECORDS') || '[]'));
+
+// Keyboard Shortcut
+const handleKeyDown = (e: KeyboardEvent) => {
+  if (e.code === 'Space' && step.value === 'interviewing' && !isListening.value && !isAiThinking.value && !isPaused.value) {
+    if (document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
+      e.preventDefault();
+      startSTT();
+    }
+  }
+};
+
+const handleKeyUp = (e: KeyboardEvent) => {
+  if (e.code === 'Space' && isListening.value) {
+    e.preventDefault();
+    stopSTT();
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('keyup', handleKeyUp);
+});
 
 // --- Media Refs ---
 const videoRef = ref(null);
@@ -473,8 +473,8 @@ const editorRef = ref(null);
 let editorInstance = null;
 
 // --- Web Speech API ---
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition = null;
+const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+let recognition: any = null;
 if (SpeechRecognition) {
   recognition = new SpeechRecognition();
   recognition.continuous = false;
@@ -485,17 +485,10 @@ const synth = window.speechSynthesis;
 
 // --- Lifecycle ---
 onMounted(() => {
-  if (!tempKey.value) {
-    showSettings.value = true;
-  }
+  // No settings needed, using environment variable
 });
 
 // --- Methods ---
-const saveSettings = () => {
-  localStorage.setItem('GEMINI_API_KEY', tempKey.value);
-  showSettings.value = false;
-};
-
 const handleFileChange = async (file) => {
   const rawFile = file.raw;
   if (!rawFile) return;
@@ -509,7 +502,7 @@ const handleFileChange = async (file) => {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        text += content.items.map(s => s.str).join(" ") + "\n";
+        text += content.items.map((s: any) => s.str).join(" ") + "\n";
       }
       config.resumeText = text;
     } else if (rawFile.name.endsWith(".docx")) {
@@ -522,7 +515,7 @@ const handleFileChange = async (file) => {
   }
 };
 
-const isConfigReady = computed(() => config.jd && config.resumeText && tempKey.value);
+const isConfigReady = computed(() => config.jd && config.resumeText);
 
 const startInterview = async () => {
   step.value = 'interviewing';
@@ -590,76 +583,100 @@ const togglePause = () => {
   }
 };
 
-const runAiStep = async (userText, isInitial = false) => {
+const runAiStep = async (userText: string, isInitial = false) => {
   if (isPaused.value) return;
   isAiThinking.value = true;
-  aiStatus.value = "AI is thinking...";
+  aiStatus.value = "AI 正在思考...";
   
-  try {
-    const genAI = new GoogleGenerativeAI(tempKey.value);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-3-flash-preview",
-      generationConfig: { responseMimeType: "application/json" }
-    });
+  const maxRetries = 3;
+  let retryCount = 0;
 
-    const systemPrompt = `You are a professional ${config.difficulty} level interviewer for a ${config.type} role.
-    Persona: ${config.persona}. 
-    - If Friendly: Be warm, encouraging, and helpful.
-    - If Strict: Be professional, critical, and focused on precision.
-    - If Expert: Deep dive into implementation details, ask "why" and "how".
-    - If Stress: Be challenging, skeptical, and push the candidate to their limits.
-    
-    Interview Context:
-    - JD: ${config.jd}
-    - Resume: ${config.resumeText}
-    - Language: ${config.language}
-    - Total Duration: ${config.duration} minutes
-    - Remaining Time: ${formatTime(remainingTime.value)}
-    
-    Core Logic:
-    1. DYNAMIC FOLLOW-UP: Always adjust your next question based on the candidate's previous answer. If they mention a specific technology or project, deep dive into it.
-    2. DEEP DIVE: Ask follow-up questions to explore the depth of their knowledge. Don't just move to the next topic.
-    3. GUIDANCE: If the candidate goes off-topic or rambles, politely but firmly guide them back to the main subject.
-    4. TIME AWARENESS: Adjust the depth and number of questions based on the remaining time.
-    
-    Rules:
-    1. Ask only ONE question at a time.
-    2. If it's a technical interview, include a coding challenge when appropriate. 
-       - CODING SCOPE: Limit challenges to LeetCode Hot 100 or similar patterns.
-       - DIFFICULTY: Target problems with a difficulty score <= 2000 (Easy, Medium, and light Hard).
-    3. Be conversational and professional.
-    
-    Output strictly in JSON format:
-    {
-      "phase": "Opening | Behavioral | Technical | Coding | Closing | Finished",
-      "action": "SPEAK | START_CODING | END_INTERVIEW",
-      "speaker_text": "The text to be spoken by the interviewer",
-      "guidance_triggered": boolean, // Set to true if you had to guide the candidate back to the topic
-      "code_context": {
-        "language": "python | javascript | cpp",
-        "initial_code": "Code template if starting a challenge"
+  const executeRequest = async (): Promise<any> => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const systemPrompt = `你是一位专业的 ${config.difficulty} 级别面试官，正在进行 ${config.type} 职位的面试。
+      面试官性格: ${config.persona}。 
+      - Friendly: 亲切、鼓励、乐于助人。
+      - Strict: 专业、严谨、注重细节。
+      - Expert: 深入探讨实现细节，多问“为什么”和“怎么做”。
+      - Stress: 具有挑战性、怀疑态度，将候选人推向极限。
+      
+      面试背景:
+      - 职位描述 (JD): ${config.jd}
+      - 简历内容: ${config.resumeText}
+      - 面试语言: ${config.language}
+      - 总时长: ${config.duration} 分钟
+      - 剩余时间: ${formatTime(remainingTime.value)}
+      
+      核心逻辑:
+      1. 动态追问: 根据候选人的回答调整下一个问题。如果提到特定技术或项目，深入挖掘。
+      2. 深度挖掘: 提出后续问题以探索知识深度，不要轻易跳到下一个话题。
+      3. 引导回归: 如果候选人偏离主题或啰嗦，礼貌地引导其回到主线。
+      4. 时间管理与节奏控制: 
+         - 必须管理面试阶段 (开场 -> 行为面试 -> 技术面试 -> 编码 -> 结语) 以适应 ${config.duration} 分钟的总时长。
+         - 剩余时间不多时，加快进度。
+         - 目标是在剩余约 2-3 分钟时开始“结语”阶段。
+      
+      评分标准 (Rubric):
+      - 技术深度: 对技术的理解程度、实现细节的掌握。
+      - 问题解决: 逻辑思维、解决编码挑战的方法。
+      - 沟通表达: 表达是否清晰、简洁、专业。
+      - 岗位匹配: 经验与 JD 的相关性。
+      - 潜力与学习: 适应能力、学习心态。
+      
+      规则:
+      1. 每次只问一个问题。
+      2. 技术面试中，适时加入编码挑战。
+         - 编码范围: LeetCode Hot 100 或类似题型。
+         - 难度: 难度分 <= 2000 (Easy, Medium, 及部分 Hard)。
+      3. 保持对话感和专业性。
+      
+      严格以 JSON 格式输出:
+      {
+        "phase": "Opening | Behavioral | Technical | Coding | Closing | Finished",
+        "action": "SPEAK | START_CODING | END_INTERVIEW",
+        "speaker_text": "面试官要说的话",
+        "guidance_triggered": boolean, // 如果你引导候选人回到了主题，设为 true
+        "code_context": {
+          "language": "python | javascript | cpp",
+          "initial_code": "开始挑战时的代码模板"
+        }
+      }`;
+
+      const chat = ai.chats.create({
+        model: "gemini-3-flash-preview",
+        config: { systemInstruction: systemPrompt }
+      });
+
+      const currentCode = editorInstance ? editorInstance.getValue() : "";
+      const fullInput = isInitial 
+        ? `开始面试。总时长 ${config.duration} 分钟。请根据此时间规划面试阶段。` 
+        : `候选人回答: ${userText}\n[剩余时间]: ${formatTime(remainingTime.value)}\n[当前代码]: ${currentCode}\n\n请根据系统提示规则继续面试。`;
+      
+      const result = await chat.sendMessage({ message: fullInput });
+      return JSON.parse(result.text);
+    } catch (error: any) {
+      if (retryCount < maxRetries && (error.message?.includes('503') || error.message?.includes('404') || error.message?.includes('high demand'))) {
+        retryCount++;
+        aiStatus.value = `请求失败，正在进行第 ${retryCount} 次重试... (${retryCount}/${maxRetries})`;
+        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+        return executeRequest();
       }
-    }`;
+      throw error;
+    }
+  };
 
-    const chat = model.startChat({
-      history: chatHistory.value,
-    });
-
-    const currentCode = editorInstance ? editorInstance.getValue() : "";
-    const fullInput = isInitial ? `Start the interview. Context: ${systemPrompt}` : `Candidate Answer: ${userText}\n[Current Code Context]: ${currentCode}\n\nContinue the interview based on the system prompt rules.`;
-    
-    const result = await chat.sendMessage(fullInput);
-    const response = await result.response;
-    const data = JSON.parse(response.text());
+  try {
+    const data = await executeRequest();
 
     // Update History
-    chatHistory.value.push({ role: "user", parts: [{ text: fullInput }] });
-    chatHistory.value.push({ role: "model", parts: [{ text: response.text() }] });
-    
-    if (!isInitial) {
+    if (isInitial) {
+      visibleHistory.value.push({ role: 'ai', text: data.speaker_text });
+    } else {
       visibleHistory.value.push({ role: 'user', text: userText });
+      visibleHistory.value.push({ role: 'ai', text: data.speaker_text });
     }
-    visibleHistory.value.push({ role: 'ai', text: data.speaker_text });
 
     // Handle Actions
     if (data.action === 'START_CODING') {
@@ -688,7 +705,7 @@ const runAiStep = async (userText, isInitial = false) => {
 
   } catch (error) {
     console.error("AI Error:", error);
-    visibleHistory.value.push({ role: 'ai', text: "I'm sorry, I encountered an error. Please try again." });
+    visibleHistory.value.push({ role: 'ai', text: "抱歉，我遇到了点问题。请重试或检查网络。" });
   } finally {
     isAiThinking.value = false;
     aiStatus.value = "";
@@ -736,38 +753,67 @@ const endInterview = async () => {
     mediaRecorder.stop();
   }
   isRecording.value = false;
-  aiStatus.value = "Generating evaluation report...";
+  aiStatus.value = "正在生成面试评估报告...";
   
+  const maxRetries = 3;
+  let retryCount = 0;
+
+  const generateReport = async (): Promise<any> => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+      const reportPrompt = `根据提供的面试历史记录，生成一份全面的 JSON 格式评估报告。
+      
+      评分细则 (Scoring Rubric):
+      1. 技术深度 (0-100): 评估对核心概念、原理及实现细节的掌握程度。
+      2. 问题解决 (0-100): 评估逻辑思维、算法能力及面对复杂问题的拆解能力。
+      3. 沟通表达 (0-100): 评估清晰度、简洁性、专业术语使用及互动表现。
+      4. 岗位匹配 (0-100): 评估过往经验与 JD 要求的契合度。
+      5. 潜力与学习 (0-100): 评估学习心态、适应能力及成长潜力。
+      
+      输出格式:
+      { 
+        "overall_score": 0-100 (上述五项的加权平均), 
+        "radar_chart": {
+          "技术深度": 0-100, 
+          "问题解决": 0-100, 
+          "沟通表达": 0-100, 
+          "岗位匹配": 0-100, 
+          "潜力与学习": 0-100
+        }, 
+        "strengths": ["3-5 个核心优势"], 
+        "weaknesses": ["2-3 个待改进点"], 
+        "final_verdict": "强烈推荐 | 推荐 | 暂不推荐",
+        "off_topic_guidance": ["列出候选人偏离主题的具体实例"],
+        "transcript_evaluation": [
+          {
+            "question": "提出的问题",
+            "answer": "候选人的回答",
+            "evaluation": "对该回答的详细评价"
+          }
+        ],
+        "final_summary": "总体能力评价及职业建议"
+      }`;
+
+      const result = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{ role: 'user', parts: [{ text: reportPrompt + "\n\n面试记录:\n" + visibleHistory.value.map(h => `${h.role}: ${h.text}`).join('\n') }] }],
+        config: { responseMimeType: "application/json" }
+      });
+      return JSON.parse(result.text);
+    } catch (error: any) {
+      if (retryCount < maxRetries && (error.message?.includes('503') || error.message?.includes('404') || error.message?.includes('high demand'))) {
+        retryCount++;
+        aiStatus.value = `报告生成失败，正在进行第 ${retryCount} 次重试...`;
+        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+        return generateReport();
+      }
+      throw error;
+    }
+  };
+
   try {
-    const genAI = new GoogleGenerativeAI(tempKey.value);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-3-flash-preview",
-      generationConfig: { responseMimeType: "application/json" }
-    });
-
-    const reportPrompt = `Based on the interview history provided, generate a comprehensive evaluation report in JSON format. 
-    Evaluate each answer in the transcript.
-    
-    Output Format:
-    { 
-      "overall_score": 0-100, 
-      "radar_chart": {"Technical Depth": 0, "Communication": 0, "Problem Solving": 0, "Experience": 0}, 
-      "strengths": ["list of 3-5 strengths"], 
-      "weaknesses": ["list of 2-3 improvements"], 
-      "final_verdict": "Strong Hire | Hire | No Hire",
-      "off_topic_guidance": ["List specific instances where the candidate went off-topic and you had to guide them back"],
-      "transcript_evaluation": [
-        {
-          "question": "The question asked",
-          "answer": "The candidate's answer",
-          "evaluation": "Your detailed evaluation of this specific answer"
-        }
-      ],
-      "final_summary": "Overall ability evaluation and suggestions"
-    }`;
-
-    const result = await model.generateContent([reportPrompt, ...chatHistory.value.map(h => h.parts[0].text)]);
-    const reportData = JSON.parse(result.response.text());
+    const reportData = await generateReport();
     report.value = reportData;
     
     // Save to history
@@ -782,12 +828,99 @@ const endInterview = async () => {
     localStorage.setItem('INTERVIEW_RECORDS', JSON.stringify(pastRecords.value));
     
     step.value = 'report';
+    await nextTick();
+    drawRadarChart();
   } catch (err) {
     console.error("Report generation error:", err);
     step.value = 'report';
   } finally {
     if (timerInterval) clearInterval(timerInterval);
+    aiStatus.value = "";
   }
+};
+
+const drawRadarChart = () => {
+  if (!radarChartRef.value || !report.value) return;
+  
+  const data = Object.entries(report.value.radar_chart).map(([key, value]) => ({
+    axis: key,
+    value: value / 100
+  }));
+
+  const width = 300;
+  const height = 300;
+  const margin = 50;
+  const radius = Math.min(width, height) / 2 - margin;
+  
+  d3.select(radarChartRef.value).selectAll("*").remove();
+  
+  const svg = d3.select(radarChartRef.value)
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("g")
+    .attr("transform", `translate(${width / 2},${height / 2})`);
+
+  const angleSlice = (Math.PI * 2) / data.length;
+  const rScale = d3.scaleLinear().range([0, radius]).domain([0, 1]);
+
+  // Draw background circles
+  const levels = 5;
+  for (let i = 0; i < levels; i++) {
+    const r = (radius / levels) * (i + 1);
+    svg.append("circle")
+      .attr("r", r)
+      .attr("fill", "none")
+      .attr("stroke", "#e5e7eb")
+      .attr("stroke-dasharray", "4 4");
+  }
+
+  // Draw axes
+  const axis = svg.selectAll(".axis")
+    .data(data)
+    .enter()
+    .append("g")
+    .attr("class", "axis");
+
+  axis.append("line")
+    .attr("x1", 0)
+    .attr("y1", 0)
+    .attr("x2", (d, i) => rScale(1) * Math.cos(angleSlice * i - Math.PI / 2))
+    .attr("y2", (d, i) => rScale(1) * Math.sin(angleSlice * i - Math.PI / 2))
+    .attr("stroke", "#e5e7eb");
+
+  axis.append("text")
+    .attr("x", (d, i) => rScale(1.2) * Math.cos(angleSlice * i - Math.PI / 2))
+    .attr("y", (d, i) => rScale(1.2) * Math.sin(angleSlice * i - Math.PI / 2))
+    .attr("dy", "0.35em")
+    .attr("text-anchor", "middle")
+    .attr("font-size", "10px")
+    .attr("font-weight", "bold")
+    .attr("fill", "#4b5563")
+    .text(d => d.axis);
+
+  // Draw radar area
+  const radarLine = d3.lineRadial<any>()
+    .radius(d => rScale(d.value))
+    .angle((d, i) => i * angleSlice)
+    .curve(d3.curveLinearClosed);
+
+  svg.append("path")
+    .datum(data)
+    .attr("d", radarLine)
+    .attr("fill", "rgba(37, 99, 235, 0.2)")
+    .attr("stroke", "#2563eb")
+    .attr("stroke-width", 2);
+
+  // Draw points
+  svg.selectAll(".point")
+    .data(data)
+    .enter()
+    .append("circle")
+    .attr("cx", (d, i) => rScale(d.value) * Math.cos(angleSlice * i - Math.PI / 2))
+    .attr("cy", (d, i) => rScale(d.value) * Math.sin(angleSlice * i - Math.PI / 2))
+    .attr("r", 4)
+    .attr("fill", "#2563eb");
 };
 
 const resetSession = () => {

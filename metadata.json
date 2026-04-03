@@ -1,5 +1,5 @@
 {
-  "name": "Local AI Interviewer",
-  "description": "A pure client-side AI voice interviewer system using Gemini API, featuring local recording and code evaluation.",
+  "name": "AI Interviewer Pro",
+  "description": "专业级本地 AI 语音面试系统，集成 Gemini API、实时录制与代码评测功能。",
   "requestFramePermissions": ["camera", "microphone"]
 }

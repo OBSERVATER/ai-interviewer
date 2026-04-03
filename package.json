@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
-    "@google/generative-ai": "^0.21.0",
+    "@google/genai": "^1.48.0",
     "@tailwindcss/vite": "^4.2.2",
+    "@types/d3": "^7.4.3",
     "axios": "^1.7.9",
+    "d3": "^7.9.0",
     "element-plus": "^2.9.1",
     "lucide-vue-next": "^0.474.0",
     "mammoth": "^1.8.0",
