@@ -286,14 +286,15 @@ import {
   Mic, Settings, ShieldCheck, Briefcase, FileText, UploadCloud, 
   CheckCircle2, Loader2, Info, AlertCircle, Settings2, Download,
   PlayCircle
-} from 'lucide-react';
+} from 'lucide-vue-next';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as pdfjsLib from "pdfjs-dist";
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import mammoth from "mammoth";
 import * as monaco from 'monaco-editor';
 
 // PDF.js Worker Configuration
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 // --- State Management ---
 const step = ref('config');
